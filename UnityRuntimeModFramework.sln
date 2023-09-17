@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.002.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UnityRuntimeModFramework", "UnityRuntimeModFramework.csproj", "{188DCAF1-6622-4EFB-9DC6-3F6F077776D5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{188DCAF1-6622-4EFB-9DC6-3F6F077776D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{188DCAF1-6622-4EFB-9DC6-3F6F077776D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{188DCAF1-6622-4EFB-9DC6-3F6F077776D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{188DCAF1-6622-4EFB-9DC6-3F6F077776D5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {34DBBA0E-E38A-4CD9-9816-CDF80746DB73}
+	EndGlobalSection
+EndGlobal
