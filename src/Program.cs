@@ -40,7 +40,6 @@ namespace Urmf
             var getProcAddressAddr = WinApi.Call(
                 WinApi.GetProcAddress(kernel32Handle, "GetProcAddress")
             );
-            Console.WriteLine($"getProcAddressAddr = {getProcAddressAddr}");
             var offset = getProcAddressAddr.ToInt64() - kernel32Handle.ToInt64();
             var kernel32 = FindProcessModule(
                 process,
@@ -90,72 +89,87 @@ namespace Urmf
                 )
             );
 
-            var returnAddress = allocatedAddress + 0x500;
-            var nameAddress = returnAddress + IntPtr.Size;
+            try
+            {
+                var returnAddress = allocatedAddress + 0x500;
+                var nameAddress = returnAddress + IntPtr.Size;
 
-            var nameBytes = Encoding.ASCII.GetBytes(name + "\0"); // null-terminated
-            WinApi.Call(
-                WinApi.WriteProcessMemory(
-                    process.Handle,
-                    nameAddress,
-                    nameBytes,
-                    (uint)nameBytes.Length,
-                    out var _
-                )
-            );
+                var nameBytes = Encoding.ASCII.GetBytes(name + "\0"); // null-terminated
+                WinApi.Call(
+                    WinApi.WriteProcessMemory(
+                        process.Handle,
+                        nameAddress,
+                        nameBytes,
+                        (uint)nameBytes.Length,
+                        out var _
+                    )
+                );
 
-            var byteCode = new AsmX8664()
-                .Sub(AsmX8664.Register.RSP, 0x20)
-                .Mov(AsmX8664.Register.RAX, getProcAddressAddr.ToInt64())
-                .Mov(AsmX8664.Register.RCX, moduleHandle.ToInt64())
-                .Mov(AsmX8664.Register.RDX, nameAddress.ToInt64())
-                .Call(AsmX8664.Register.RAX)
-                .MovRaxToAddress((ulong)returnAddress.ToInt64())
-                .Add(AsmX8664.Register.RSP, 0x20)
-                .Ret()
-                .GetBytes();
+                var byteCode = new AsmX8664()
+                    .Sub(AsmX8664.Register.RSP, 0x20)
+                    .Mov(AsmX8664.Register.RAX, getProcAddressAddr.ToInt64())
+                    .Mov(AsmX8664.Register.RCX, moduleHandle.ToInt64())
+                    .Mov(AsmX8664.Register.RDX, nameAddress.ToInt64())
+                    .Call(AsmX8664.Register.RAX)
+                    .MovRaxToAddress((ulong)returnAddress.ToInt64())
+                    .Add(AsmX8664.Register.RSP, 0x20)
+                    .Ret()
+                    .GetBytes();
 
-            // Console.WriteLine(getProcAddressAddr.ToInt64().ToString("X8"));
-            // Console.WriteLine(moduleHandle.ToInt64().ToString("X8"));
-            // Console.WriteLine(nameAddress.ToInt64().ToString("X8"));
-            // Console.WriteLine(returnAddress.ToInt64().ToString("X8"));
-            // Console.WriteLine(string.Join(", ", byteCode.Select(b => b.ToString("X2"))));
+                // Console.WriteLine(getProcAddressAddr.ToInt64().ToString("X8"));
+                // Console.WriteLine(moduleHandle.ToInt64().ToString("X8"));
+                // Console.WriteLine(nameAddress.ToInt64().ToString("X8"));
+                // Console.WriteLine(returnAddress.ToInt64().ToString("X8"));
+                // Console.WriteLine(string.Join(", ", byteCode.Select(b => b.ToString("X2"))));
 
-            WinApi.Call(
-                WinApi.WriteProcessMemory(
-                    process.Handle,
-                    allocatedAddress,
-                    byteCode,
-                    (uint)byteCode.Length,
-                    out var _
-                )
-            );
+                WinApi.Call(
+                    WinApi.WriteProcessMemory(
+                        process.Handle,
+                        allocatedAddress,
+                        byteCode,
+                        (uint)byteCode.Length,
+                        out var _
+                    )
+                );
 
-            var threadHandle = WinApi.Call(
-                WinApi.CreateRemoteThread(
-                    process.Handle,
-                    IntPtr.Zero,
-                    0,
-                    allocatedAddress,
-                    IntPtr.Zero,
-                    0,
-                    out var _
-                )
-            );
-            WinApi.Call(WinApi.WaitForSingleObject(threadHandle, WinApi.INFINITE), 0xFFFFFFFF);
-            WinApi.Call(WinApi.CloseHandle(threadHandle));
+                var threadHandle = WinApi.Call(
+                    WinApi.CreateRemoteThread(
+                        process.Handle,
+                        IntPtr.Zero,
+                        0,
+                        allocatedAddress,
+                        IntPtr.Zero,
+                        0,
+                        out var _
+                    )
+                );
+                WinApi.Call(WinApi.WaitForSingleObject(threadHandle, WinApi.INFINITE), 0xFFFFFFFF);
+                WinApi.Call(WinApi.CloseHandle(threadHandle));
 
-            var addressBuffer = new byte[IntPtr.Size];
-            WinApi.Call(
-                WinApi.ReadProcessMemory(
-                    process.Handle,
-                    returnAddress,
-                    addressBuffer,
-                    (uint)addressBuffer.Length,
-                    out var _
-                )
-            );
-            return new IntPtr(BitConverter.ToInt64(addressBuffer, 0));
+                var resultBuffer = new byte[IntPtr.Size];
+                WinApi.Call(
+                    WinApi.ReadProcessMemory(
+                        process.Handle,
+                        returnAddress,
+                        resultBuffer,
+                        (uint)resultBuffer.Length,
+                        out var _
+                    )
+                );
+
+                return new IntPtr(BitConverter.ToInt64(resultBuffer, 0));
+            }
+            finally
+            {
+                WinApi.Call(
+                    WinApi.VirtualFreeEx(
+                        process.Handle,
+                        allocatedAddress,
+                        PAGE_SIZE,
+                        WinApi.FreeType.MEM_RELEASE
+                    )
+                );
+            }
         }
     }
 }

@@ -121,7 +121,6 @@ namespace Urmf
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CloseHandle(IntPtr hObject);
 
         public enum AllocationType : uint
@@ -142,6 +141,21 @@ namespace Urmf
             uint dwSize,
             AllocationType flAllocationType,
             Protection flProtect
+        );
+
+        [Flags]
+        public enum FreeType
+        {
+            MEM_DECOMMIT = 0x4000,
+            MEM_RELEASE = 0x8000
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool VirtualFreeEx(
+            IntPtr hProcess,
+            IntPtr lpAddress,
+            uint dwSize,
+            FreeType dwFreeType
         );
 
         [DllImport(
