@@ -7,135 +7,81 @@ namespace Urmf
 {
     public static class WinApi
     {
-        public class WinApiException : Exception
-        {
-            public WinApiException(uint code, string message)
-                : base($"Windows API failed: [{code}] {message}") { }
-        }
+        private const uint HR_SUCCESS = 0x80070000;
 
-        public static void Call(bool succeeded)
+        private static void CheckError(bool succeeded)
         {
             if (!succeeded)
             {
-                var code = GetLastError();
-                var message = GetErrorMessage(code);
-                throw new WinApiException(code, message);
+                var hr = Marshal.GetHRForLastWin32Error();
+                if ((uint)hr != HR_SUCCESS)
+                    Marshal.ThrowExceptionForHR(hr);
             }
         }
 
-        public static uint Call(uint result, uint failureCode = 0)
+        private static uint CheckError(uint result, uint failureCode = 0)
         {
             if (result == failureCode)
-                Call(false);
+                CheckError(false);
             return result;
         }
 
-        public static IntPtr Call(IntPtr result)
+        private static IntPtr CheckError(IntPtr result)
         {
             if (result == IntPtr.Zero)
-                Call(false);
+                CheckError(false);
             return result;
         }
 
-        public static int GetPidByName(string processName)
-        {
-            foreach (var process in Process.GetProcesses())
-            {
-                if (process.ProcessName == processName)
-                {
-                    return process.Id;
-                }
-            }
-            throw new Exception($"Process not found with name: {processName}");
-        }
+        [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", SetLastError = true)]
+        private static extern IntPtr LoadLibraryInternal(string lpFileName);
 
-        [DllImport("kernel32.dll")]
-        public static extern uint GetLastError();
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern uint FormatMessage(
-            FormatMessageFlags dwFlags,
-            IntPtr lpSource,
-            uint dwMessageId,
-            uint dwLanguageId,
-            StringBuilder lpBuffer,
-            uint nSize,
-            IntPtr arguments
-        );
-
-        [Flags]
-        public enum FormatMessageFlags : uint
-        {
-            FORMAT_MESSAGE_ALLOCATE_BUFFER = 0x00000100,
-            FORMAT_MESSAGE_IGNORE_INSERTS = 0x00000200,
-            FORMAT_MESSAGE_FROM_STRING = 0x00000400,
-            FORMAT_MESSAGE_FROM_HMODULE = 0x00000800,
-            FORMAT_MESSAGE_FROM_SYSTEM = 0x00001000,
-            FORMAT_MESSAGE_ARGUMENT_ARRAY = 0x00002000,
-            FORMAT_MESSAGE_MAX_WIDTH_MASK = 0x000000FF
-        }
-
-        public static string GetErrorMessage(uint errorCode)
-        {
-            const uint BUFFER_SIZE = 1024;
-            StringBuilder messageBuffer = new StringBuilder((int)BUFFER_SIZE);
-
-            FormatMessage(
-                FormatMessageFlags.FORMAT_MESSAGE_FROM_SYSTEM
-                    | FormatMessageFlags.FORMAT_MESSAGE_IGNORE_INSERTS,
-                IntPtr.Zero,
-                errorCode,
-                0,
-                messageBuffer,
-                BUFFER_SIZE,
-                IntPtr.Zero
-            );
-
-            return messageBuffer.ToString().Trim();
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr LoadLibrary(string lpFileName);
+        public static IntPtr LoadLibrary(string lpFileName) =>
+            CheckError(LoadLibraryInternal(lpFileName));
 
         public enum ProcessAccess : uint
         {
             ALL = 0x1fffff,
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenProcess(
+        [DllImport("kernel32.dll", EntryPoint = "OpenProcess", SetLastError = true)]
+        private static extern IntPtr OpenProcessInternal(
             ProcessAccess dwDesiredAccess,
             bool bInheritHandle,
             int dwProcessId
         );
 
-        /// <summary>
-        /// Remember to pass the IntPtr into CloseHandle when you're done.
-        /// </summary>
-        public static IntPtr OpenProcess(int processId, ProcessAccess desiredAccess)
-        {
-            var hProcess = OpenProcess(desiredAccess, false, processId);
-            if (hProcess == IntPtr.Zero)
-                throw new Exception("Failed to open process");
-            return hProcess;
-        }
+        public static IntPtr OpenProcess(
+            ProcessAccess dwDesiredAccess,
+            bool bInheritHandle,
+            int dwProcessId
+        ) => CheckError(OpenProcessInternal(dwDesiredAccess, bInheritHandle, dwProcessId));
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool CloseHandle(IntPtr hObject);
+        [DllImport("kernel32.dll", EntryPoint = "CloseHandle", SetLastError = true)]
+        private static extern bool CloseHandleInternal(IntPtr hObject);
 
+        public static void CloseHandle(IntPtr hObject) => CheckError(CloseHandleInternal(hObject));
+
+        [Flags]
         public enum AllocationType : uint
         {
             MEM_COMMIT = 0x1000,
             MEM_RESERVE = 0x2000,
         }
 
+        [Flags]
         public enum Protection : uint
         {
             EXECUTE_READ_WRITE = 0x40,
         }
 
-        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-        public static extern IntPtr VirtualAllocEx(
+        [DllImport(
+            "kernel32.dll",
+            EntryPoint = "VirtualAllocEx",
+            SetLastError = true,
+            ExactSpelling = true
+        )]
+        private static extern IntPtr VirtualAllocExInternal(
             IntPtr hProcess,
             IntPtr lpAddress,
             uint dwSize,
@@ -143,34 +89,59 @@ namespace Urmf
             Protection flProtect
         );
 
+        public static IntPtr VirtualAllocEx(
+            IntPtr hProcess,
+            IntPtr lpAddress,
+            uint dwSize,
+            AllocationType flAllocationType,
+            Protection flProtect
+        ) =>
+            CheckError(
+                VirtualAllocExInternal(hProcess, lpAddress, dwSize, flAllocationType, flProtect)
+            );
+
         [Flags]
-        public enum FreeType
+        public enum FreeType : uint
         {
             MEM_DECOMMIT = 0x4000,
             MEM_RELEASE = 0x8000
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool VirtualFreeEx(
+        [DllImport("kernel32.dll", EntryPoint = "VirtualFreeEx", SetLastError = true)]
+        private static extern bool VirtualFreeExInternal(
             IntPtr hProcess,
             IntPtr lpAddress,
             uint dwSize,
             FreeType dwFreeType
         );
 
+        public static void VirtualFreeEx(
+            IntPtr hProcess,
+            IntPtr lpAddress,
+            uint dwSize,
+            FreeType dwFreeType
+        ) => CheckError(VirtualFreeExInternal(hProcess, lpAddress, dwSize, dwFreeType));
+
         [DllImport(
             "kernel32.dll",
+            EntryPoint = "GetProcAddress",
             CharSet = CharSet.Ansi,
             ExactSpelling = true,
             SetLastError = true
         )]
-        public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+        private static extern IntPtr GetProcAddressInternal(IntPtr hModule, string procName);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-        public static extern IntPtr GetModuleHandle(string lpModuleName);
+        public static IntPtr GetProcAddress(IntPtr hModule, string procName) =>
+            CheckError(GetProcAddressInternal(hModule, procName));
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool WriteProcessMemory(
+        [DllImport("kernel32.dll", EntryPoint = "GetModuleHandle", CharSet = CharSet.Auto)]
+        private static extern IntPtr GetModuleHandleInternal(string lpModuleName);
+
+        public static IntPtr GetModuleHandle(string lpModuleName) =>
+            CheckError(GetModuleHandleInternal(lpModuleName));
+
+        [DllImport("kernel32.dll", EntryPoint = "WriteProcessMemory", SetLastError = true)]
+        private static extern bool WriteProcessMemoryInternal(
             IntPtr hProcess,
             IntPtr lpBaseAddress,
             byte[] lpBuffer,
@@ -178,8 +149,25 @@ namespace Urmf
             out int lpNumberOfBytesWritten
         );
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool ReadProcessMemory(
+        public static void WriteProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            uint nSize,
+            out int lpNumberOfBytesWritten
+        ) =>
+            CheckError(
+                WriteProcessMemoryInternal(
+                    hProcess,
+                    lpBaseAddress,
+                    lpBuffer,
+                    nSize,
+                    out lpNumberOfBytesWritten
+                )
+            );
+
+        [DllImport("kernel32.dll", EntryPoint = "ReadProcessMemory", SetLastError = true)]
+        private static extern bool ReadProcessMemoryInternal(
             IntPtr hProcess,
             IntPtr lpBaseAddress,
             [Out] byte[] lpBuffer,
@@ -187,8 +175,25 @@ namespace Urmf
             out int lpNumberOfBytesRead
         );
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr CreateRemoteThread(
+        public static void ReadProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            uint dwSize,
+            out int lpNumberOfBytesRead
+        ) =>
+            CheckError(
+                ReadProcessMemoryInternal(
+                    hProcess,
+                    lpBaseAddress,
+                    lpBuffer,
+                    dwSize,
+                    out lpNumberOfBytesRead
+                )
+            );
+
+        [DllImport("kernel32.dll", EntryPoint = "CreateRemoteThread", SetLastError = true)]
+        private static extern IntPtr CreateRemoteThreadInternal(
             IntPtr hProcess,
             IntPtr lpThreadAttributes,
             uint dwStackSize,
@@ -198,8 +203,32 @@ namespace Urmf
             out uint lpThreadId
         );
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+        public static IntPtr CreateRemoteThread(
+            IntPtr hProcess,
+            IntPtr lpThreadAttributes,
+            uint dwStackSize,
+            IntPtr lpStartAddress,
+            IntPtr lpParameter,
+            uint dwCreationFlags,
+            out uint lpThreadId
+        ) =>
+            CheckError(
+                CreateRemoteThreadInternal(
+                    hProcess,
+                    lpThreadAttributes,
+                    dwStackSize,
+                    lpStartAddress,
+                    lpParameter,
+                    dwCreationFlags,
+                    out lpThreadId
+                )
+            );
+
+        [DllImport("kernel32.dll", EntryPoint = "WaitForSingleObject", SetLastError = true)]
+        private static extern uint WaitForSingleObjectInternal(IntPtr hHandle, uint dwMilliseconds);
+
+        public static uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds) =>
+            CheckError(WaitForSingleObjectInternal(hHandle, dwMilliseconds), 0xFFFFFFFF);
 
         public const uint INFINITE = 0xFFFFFFFF;
         public const uint WAIT_ABANDONED = 0x00000080;
